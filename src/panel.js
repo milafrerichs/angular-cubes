@@ -1,24 +1,24 @@
 
-ngCubes.directive('cubesPanel', ['$rootScope', 'slugifyFilter', function($rootScope, slugifyFilter) {
+ngBabbage.directive('babbagePanel', ['$rootScope', 'slugifyFilter', function($rootScope, slugifyFilter) {
   return {
     restrict: 'EA',
-    require: '^cubes',
+    require: '^babbage',
     scope: {
     },
-    templateUrl: 'angular-cubes-templates/panel.html',
-    link: function($scope, $element, attrs, cubesCtrl) {
+    templateUrl: 'babbage-templates/panel.html',
+    link: function($scope, $element, attrs, babbageCtrl) {
       var model = null;
 
       $scope.state = {};
       $scope.axes = [];
       $scope.filterAttributes = [];
       $scope.filters = [];
-      $scope.getSort = cubesCtrl.getSort;
-      $scope.pushSort = cubesCtrl.pushSort;
+      $scope.getSort = babbageCtrl.getSort;
+      $scope.pushSort = babbageCtrl.pushSort;
+      $scope.embedLink = null;
 
       var update = function() {
-        //$scope.state.page = 0;
-        cubesCtrl.setState($scope.state);
+        babbageCtrl.setState($scope.state);
       };
 
       $scope.add = function(axis, ref) {
@@ -27,7 +27,7 @@ ngCubes.directive('cubesPanel', ['$rootScope', 'slugifyFilter', function($rootSc
             axis.selected.push(ref);
           } else {
             if (axis.selected.length) {
-              $scope.state.order = cubesCtrl.removeSorts(axis.selected[0]);  
+              $scope.state.order = babbageCtrl.removeSorts(axis.selected[0]);
             }
             axis.selected = [ref];
           }
@@ -41,7 +41,7 @@ ngCubes.directive('cubesPanel', ['$rootScope', 'slugifyFilter', function($rootSc
         if (i != -1) {
           axis.selected.splice(i, 1);
           $scope.state[axis.name] = axis.selected;
-          $scope.state.order = cubesCtrl.removeSorts(ref);
+          $scope.state.order = babbageCtrl.removeSorts(ref);
           update();
         }
       };
@@ -50,35 +50,30 @@ ngCubes.directive('cubesPanel', ['$rootScope', 'slugifyFilter', function($rootSc
         var options = [];
         for (var di in model.dimensions) {
           var dim = model.dimensions[di];
-          for (var li in dim.levels) {
-            var lvl = dim.levels[li];
-            for (var ai in lvl.attributes) {
-              var attr = angular.copy(lvl.attributes[ai]);
-              attr.dimension = dim;
-              attr.level = lvl;
-              attr.type = 'attributes';
-              if (slugifyFilter(dim.label) != slugifyFilter(attr.label)) {
-                attr.subLabel = '' + attr.label;
-              }
-              attr.sortKey = '0' + dim.label + attr.label;
-              attr.label = dim.label;
-              attr.cardinality = lvl.cardinality;
-              options.push(attr);
+          for (var ai in dim.attributes) {
+            var attr = angular.copy(dim.attributes[ai]);
+            attr.dimension = dim;
+            attr.type = 'attributes';
+            if (slugifyFilter(dim.label) != slugifyFilter(attr.label)) {
+              attr.subLabel = '' + attr.label;
             }
+            attr.sortKey = '0' + dim.label + attr.label;
+            attr.label = dim.label;
+            options.push(attr);
           }
         }
 
         for (var ai in model.aggregates) {
           var agg = model.aggregates[ai];
           agg.type = 'aggregates';
-          agg.sortKey = '1' + agg.name;
+          agg.sortKey = '1' + ai;
           options.push(agg);
         }
 
         for (var mi in model.measures) {
           var mea = model.measures[mi];
           mea.type = 'measures';
-          mea.sortKey = '2' + mea.name;
+          mea.sortKey = '2' + mi;
           options.push(mea);
         }
 
@@ -91,11 +86,14 @@ ngCubes.directive('cubesPanel', ['$rootScope', 'slugifyFilter', function($rootSc
 
       var makeAxes = function(state, options) {
         var axes = [];
-        if (!cubesCtrl.queryModel) return [];
+        if (!babbageCtrl.queryModel) return [];
 
-        for (var name in cubesCtrl.queryModel) {
-          var axis = cubesCtrl.queryModel[name];
+        for (var name in babbageCtrl.queryModel) {
+          var axis = babbageCtrl.queryModel[name];
           axis.name = name;
+          if (!angular.isDefined(axis.remove)) {
+            axis.remove = axis.multiple;
+          }
           axis.sortId = axis.sortId || 1;
           axis.available = [];
           axis.active = [];
@@ -131,26 +129,13 @@ ngCubes.directive('cubesPanel', ['$rootScope', 'slugifyFilter', function($rootSc
         var filters = [];
         for (var i in options) {
           var opt = options[i];
-          if (opt.type == 'attributes' && opt.cardinality != 'high') {
-            if (opt.level.label_attribute == opt.name) {
-              filters.push(opt);  
+          if (opt.type == 'attributes' && opt.dimension.cardinality_class != 'high') {
+            if (opt.dimension.label_ref == opt.ref) {
+              filters.push(opt);
             }
           }
         }
         return filters.sort(sortOptions);
-      };
-
-      var refToDimension = function(ref) {
-        return ref.split('.', 1);
-      };
-
-      var makeValues = function(ref, res) {
-        return res.data.data.map(function(e) {
-          return {
-            label: e[ref],
-            value: e[model.refKeys[ref]]
-          };
-        });
       };
 
       var getAttributeByRef = function(ref) {
@@ -177,12 +162,14 @@ ngCubes.directive('cubesPanel', ['$rootScope', 'slugifyFilter', function($rootSc
       };
 
       $scope.addFilter = function(attr, value) {
-        cubesCtrl.getDimensionMembers(refToDimension(attr.ref)).then(function(res) {
+        babbageCtrl.getDimensionMembers(attr.ref).then(function(res) {
           $scope.filters.push({
             ref: attr.ref,
             attr: attr,
             value: value,
-            values: makeValues(attr.ref, res)
+            values: res.data.data.map(function(e) {
+              return e[attr.ref];
+            })
           });
         });
       };
@@ -219,7 +206,7 @@ ngCubes.directive('cubesPanel', ['$rootScope', 'slugifyFilter', function($rootSc
         update();
       };
 
-      $rootScope.$on(cubesCtrl.modelUpdate, function(event, mdl, state) {
+      var unsubscribe = babbageCtrl.subscribe(function(event, mdl, state) {
         model = mdl;
         $scope.state = state;
 
@@ -230,6 +217,8 @@ ngCubes.directive('cubesPanel', ['$rootScope', 'slugifyFilter', function($rootSc
         loadFilters(state);
 
       });
+      $scope.$on('$destroy', unsubscribe);
+
     }
   };
 }]);

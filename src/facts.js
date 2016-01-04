@@ -1,22 +1,22 @@
 
-ngCubes.directive('cubesFacts', ['$rootScope', '$http', '$q', function($rootScope, $http, $q) {
+ngBabbage.directive('babbageFacts', ['$rootScope', '$http', '$q', function($rootScope, $http, $q) {
   return {
   restrict: 'EA',
-  require: '^cubes',
+  require: '^babbage',
   scope: {
     drilldown: '='
   },
-  templateUrl: 'angular-cubes-templates/facts.html',
-  link: function(scope, element, attrs, cubesCtrl) {
+  templateUrl: 'babbage-templates/facts.html',
+  link: function(scope, element, attrs, babbageCtrl) {
     scope.page = 0;
     scope.data = [];
     scope.columns = [];
     scope.pagerCtx = {};
-    scope.getSort = cubesCtrl.getSort;
-    scope.pushSort = cubesCtrl.pushSort;
+    scope.getSort = babbageCtrl.getSort;
+    scope.pushSort = babbageCtrl.pushSort;
 
     var query = function(model, state) {
-      var q = cubesCtrl.getQuery();
+      var q = babbageCtrl.getQuery();
       q.fields = asArray(state.fields);
       if (q.fields.length == 0) {
         q.fields = defaultFields(model);
@@ -34,43 +34,31 @@ ngCubes.directive('cubesFacts', ['$rootScope', '$http', '$q', function($rootScop
       var aq = angular.copy(q);
       aq.drilldown = aq.fields = [];
       aq.page = 0;
-      var facts = $http.get(cubesCtrl.getApiUrl('facts'),
-                            cubesCtrl.queryParams(q)),
-          aggs = $http.get(cubesCtrl.getApiUrl('aggregate'),
-                            cubesCtrl.queryParams(aq));
-      $q.all([facts, aggs]).then(function(res) {
-        queryResult(res[0].data, res[1].data, q, state, model);
+      var dfd = $http.get(babbageCtrl.getApiUrl('facts'),
+                          babbageCtrl.queryParams(q));
+      dfd.then(function(res) {
+        queryResult(res.data, q, state, model);
       });
     };
 
-    var queryResult = function(data, aggs, q, state, model) {
-      if (!data.length) {
+    var queryResult = function(data, q, state, model) {
+      if (!data.data.length) {
         scope.columns = [];
         scope.data = [];
         scope.pagerCtx = {};
         return;
       };
 
-      var frst = data[0],
-          keys = [];
-
-      for (var k in frst) {
-        keys.push(k);
-      }
-      keys = keys.sort();
-
       var columns = [],
           prev = null,
           prev_idx = 0;
 
-      for (var i in keys) {
-        var ref = keys[i],
+      for (var i in data.fields) {
+        var ref = data.fields[i],
             column = model.refs[ref],
             header = column.dimension ? column.dimension : column;
 
-        column.ref = ref;
-
-        if (header.name == prev) {
+        if (prev && header.name == prev) {
           columns[prev_idx].span += 1;
           column.span = 0;
         } else {
@@ -84,12 +72,11 @@ ngCubes.directive('cubesFacts', ['$rootScope', '$http', '$q', function($rootScop
         columns.push(column);
       }
       scope.columns = columns;
-      scope.data = data;
+      scope.data = data.data;
       scope.pagerCtx = {
         page: q.page,
         pagesize: q.pagesize,
-        // FIXME: this is SpenDB-specific:
-        total: aggs.summary.fact_count
+        total: data.total_fact_count
       }
     };
 
@@ -101,25 +88,23 @@ ngCubes.directive('cubesFacts', ['$rootScope', '$http', '$q', function($rootScop
       }
       for (var i in model.dimensions) {
         var dim = model.dimensions[i];
-        for (var j in dim.levels) {
-          var lvl = dim.levels[j];
-          for (var k in lvl.attributes) {
-            var attr = lvl.attributes[k];
-            if (attr.name == lvl.label_attribute) {
-              defaults.push(attr.ref);
-            }
+        for (var k in dim.attributes) {
+          var attr = dim.attributes[k];
+          if (k == dim.label_attribute) {
+            defaults.push(attr.ref);
           }
         }
       }
       return defaults;
     };
 
-    $rootScope.$on(cubesCtrl.modelUpdate, function(event, model, state) {
+    var unsubscribe = babbageCtrl.subscribe(function(event, model, state) {
       query(model, state);
     });
+    scope.$on('$destroy', unsubscribe);
 
     // console.log('facts init');
-    cubesCtrl.init({
+    babbageCtrl.init({
       fields: {
         label: 'Columns',
         addLabel: 'add column',
@@ -132,4 +117,3 @@ ngCubes.directive('cubesFacts', ['$rootScope', '$http', '$q', function($rootScop
   }
   };
 }]);
-
